@@ -38,8 +38,16 @@ class Repo extends React.Component {
         </div>
         <div className="pt-4 pb-2">
           <span className="bg-gray-200 inline-block rounded-full px-3 py-1 text-sm font-semibold text-gray-700 mr-2 mb-2">
+            Commits Ahead: {this.state.commits.ahead_by}
+          </span>
+          <span className="bg-gray-200 inline-block rounded-full px-3 py-1 text-sm font-semibold text-gray-700 mr-2 mb-2">
             Issues: {this.state.open_issues_count}
           </span>
+          {this.state.latest_release && (
+            <span className="bg-gray-200 inline-block rounded-full px-3 py-1 text-sm font-semibold text-gray-700 mr-2 mb-2">
+              Latest: {this.state.latest_release.tag_name}
+            </span>
+          )}
         </div>
       </>
     );

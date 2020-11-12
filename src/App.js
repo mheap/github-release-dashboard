@@ -8,28 +8,28 @@ class App extends React.Component {
   constructor() {
     super();
     this.state = {
-      unreleased: true,
+      unreleased: false,
       dependabot_only: false,
+      zero_ahead: false,
       repos: [],
+      authToken: null,
+      targetUser: null,
     };
-  }
-
-  componentDidMount() {
-    this.loadRepos();
   }
 
   async loadRepos() {
     const octokit = new Octokit({
-      auth: "token TOKEN",
+      auth: `token ${this.state.authToken}`,
     });
 
     let { data: repos } = await octokit.repos.listForUser({
-      username: "mheap",
+      username: this.state.targetUser,
       per_page: 100,
       //per_page: 1,
     });
 
-    console.log(repos);
+    // Remove archived repos
+    repos = repos.filter((r) => !r.archived);
 
     this.setState({ repos });
 
@@ -61,58 +61,32 @@ class App extends React.Component {
           head: repo.default_branch,
         });
 
-        console.log(commits);
         repo.commits = commits;
         return repo;
       })
     );
 
     // Are they all authored by Dependabot?
+    repos = await Promise.all(
+      repos.map(async (repo) => {
+        if (!repo.commits || repo.commits.ahead_by === 0) {
+          return repo;
+        }
 
-    console.log(repos);
+        const nonDependabot = repo.commits.commits.filter((c) => {
+          return c.commit.author.login !== "dependabot[bot]";
+        });
+
+        repo.dependabot_only = true;
+        if (nonDependabot.length > 0) {
+          repo.dependabot_only = false;
+        }
+
+        return repo;
+      })
+    );
+
     this.setState({ repos });
-
-    return;
-
-    this.setState({
-      repos: [
-        {
-          owner: "mheap",
-          repo: "action-test",
-          commits: 6,
-          latest_release: "1.2.3",
-          dependabot_only: true,
-        },
-        {
-          owner: "mheap",
-          repo: "demo",
-          commits: 2,
-          latest_release: "2.6.5",
-          dependabot_only: false,
-        },
-        {
-          owner: "mheap",
-          repo: "foo",
-          commits: 0,
-          latest_release: "0.0.4",
-          dependabot_only: false,
-        },
-        {
-          owner: "mheap",
-          repo: "other-thing",
-          commits: 100,
-          latest_release: "8.0.0",
-          dependabot_only: false,
-        },
-        {
-          owner: "mheap",
-          repo: "no-release",
-          commits: 100,
-          latest_release: null,
-          dependabot_only: false,
-        },
-      ],
-    });
   }
 
   invert(opt) {
@@ -137,21 +111,83 @@ class App extends React.Component {
         >
           Dependabot Only
         </FilterButton>
+        <FilterButton
+          defaultState={this.state.zero_ahead}
+          onClick={() => this.invert("zero_ahead")}
+        >
+          Up to date
+        </FilterButton>
       </div>
     );
   }
 
+  handleSubmit(event) {
+    this.setState(
+      {
+        authToken: event.target.elements.token.value,
+        targetUser: event.target.elements.user.value,
+      },
+      () => {
+        this.loadRepos();
+      }
+    );
+    event.preventDefault();
+  }
+
+  renderTokenInput() {
+    return (
+      <form onSubmit={this.handleSubmit.bind(this)}>
+        <strong>
+          This all runs in the browser. We never see your GitHub Access Token
+          <br />
+          <br />
+        </strong>
+        <label className="w-12 inline-block" htmlFor="token">
+          Token:
+        </label>
+        <input
+          className="ml-2 border-2"
+          id="token"
+          name="token"
+          type="password"
+        />
+        <br />
+        <label className="w-12 inline-block" htmlFor="user">
+          User:
+        </label>
+        <input className="ml-2 border-2" id="user" name="user" />
+        <br /> <br />
+        <input
+          className="bg-blue-500 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded"
+          type="submit"
+          value="Enter"
+        />
+      </form>
+    );
+  }
+
   render() {
+    if (!this.state.authToken) {
+      return this.renderTokenInput();
+    }
+
     return (
       <div>
         {this.renderFilters()}
         <div className="flex flex-wrap my-4">
           {this.state.repos.map((r) => {
             if (!this.state.unreleased && r.latest_release === undefined) {
-              return;
+              return "";
             }
             if (this.state.dependabot_only && !r.dependabot_only) {
-              return;
+              return "";
+            }
+            if (
+              !this.state.zero_ahead &&
+              r.commits &&
+              r.commits.ahead_by === 0
+            ) {
+              return "";
             }
             return <Repo repo={r} key={r.full_name} />;
           })}
