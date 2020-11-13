@@ -22,11 +22,21 @@ class App extends React.Component {
       auth: `token ${this.state.authToken}`,
     });
 
-    let { data: repos } = await octokit.repos.listForUser({
-      username: this.state.targetUser,
-      per_page: 100,
-      //per_page: 1,
-    });
+    let repos = []
+    let page = 1;
+    while (true) {
+      const perPage = 100;
+      const { data: newRepos } = await octokit.repos.listForUser({
+        username: this.state.targetUser,
+        per_page: perPage,
+        page: page
+      });
+      repos = repos.concat(newRepos)
+      if (newRepos.length < perPage) {
+        break;
+      }
+      page +=1;
+    }
 
     // Remove archived repos
     repos = repos.filter((r) => !r.archived);
