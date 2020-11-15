@@ -14,6 +14,7 @@ class App extends React.Component {
       repos: [],
       authToken: null,
       targetUser: null,
+      loading_progress: "- Fetching repos",
     };
   }
 
@@ -22,16 +23,20 @@ class App extends React.Component {
       auth: `token ${this.state.authToken}`,
     });
 
-    let { data: repos } = await octokit.repos.listForUser({
-      username: this.state.targetUser,
-      per_page: 100,
-      //per_page: 1,
-    });
+    let repos = await octokit.paginate(
+      octokit.repos.listForUser,
+      {
+        username: this.state.targetUser,
+        per_page: 100,
+        //per_page: 1,
+      },
+      (response) => response.data
+    );
 
     // Remove archived repos
     repos = repos.filter((r) => !r.archived);
 
-    this.setState({ repos });
+    this.setState({ repos, loading_progress: "- Fetching releases" });
 
     // Get the latest release
     repos = await Promise.all(
@@ -46,6 +51,8 @@ class App extends React.Component {
         return repo;
       })
     );
+
+    this.setState({ loading_progress: "- Fetching commits since release" });
 
     // Fetch the number of commits since that release
     repos = await Promise.all(
@@ -65,6 +72,8 @@ class App extends React.Component {
         return repo;
       })
     );
+
+    this.setState({ loading_progress: "- Tagging dependabot commits" });
 
     // Are they all authored by Dependabot?
     repos = await Promise.all(
@@ -86,7 +95,7 @@ class App extends React.Component {
       })
     );
 
-    this.setState({ repos });
+    this.setState({ repos, loading_progress: "" });
   }
 
   invert(opt) {
@@ -173,6 +182,10 @@ class App extends React.Component {
 
     return (
       <div>
+        <p>
+          Total repos loaded: {this.state.repos.length}{" "}
+          {this.state.loading_progress}
+        </p>
         {this.renderFilters()}
         <div className="flex flex-wrap my-4">
           {this.state.repos.map((r) => {
