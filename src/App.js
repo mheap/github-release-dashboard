@@ -14,17 +14,16 @@ class App extends React.Component {
       repos: [],
       authToken: null,
       targetUser: null,
+      tokenError: "",
       loading_progress: "- Fetching repos",
     };
+
+    this.octokit = undefined;
   }
 
   async loadRepos() {
-    const octokit = new Octokit({
-      auth: `token ${this.state.authToken}`,
-    });
-
-    let repos = await octokit.paginate(
-      octokit.repos.listForUser,
+    let repos = await this.octokit.paginate(
+      this.octokit.repos.listForUser,
       {
         username: this.state.targetUser,
         per_page: 100,
@@ -41,7 +40,7 @@ class App extends React.Component {
     // Get the latest release
     repos = await Promise.all(
       repos.map(async (repo) => {
-        const { data: release } = await octokit.repos.listReleases({
+        const { data: release } = await this.octokit.repos.listReleases({
           owner: repo.owner.login,
           repo: repo.name,
           per_page: 1,
@@ -61,7 +60,7 @@ class App extends React.Component {
           return repo;
         }
 
-        const { data: commits } = await octokit.repos.compareCommits({
+        const { data: commits } = await this.octokit.repos.compareCommits({
           owner: repo.owner.login,
           repo: repo.name,
           base: repo.latest_release?.tag_name,
@@ -130,7 +129,29 @@ class App extends React.Component {
     );
   }
 
-  handleSubmit(event) {
+  async handleSubmit(event) {
+    event.preventDefault();
+
+    this.octokit = new Octokit({
+      auth: `token ${event.target.elements.token.value}`,
+    });
+
+    // Check that the credentials work
+    try {
+      await this.octokit.request("/user");
+      this.setState({ tokenError: "" });
+    } catch (e) {
+      this.setState({
+        tokenError: (
+          <p className="mb-4 text-3xl text-red-800">
+            Invalid credentials provided.
+          </p>
+        ),
+      });
+      this.octokit = undefined;
+      return;
+    }
+
     this.setState(
       {
         authToken: event.target.elements.token.value,
@@ -140,12 +161,12 @@ class App extends React.Component {
         this.loadRepos();
       }
     );
-    event.preventDefault();
   }
 
   renderTokenInput() {
     return (
       <form onSubmit={this.handleSubmit.bind(this)}>
+        {this.state.tokenError}
         <strong>
           This all runs in the browser. We never see your GitHub Access Token
           <br />
